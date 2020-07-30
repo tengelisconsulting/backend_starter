@@ -45,7 +45,7 @@ services:
 
   # core stuff
   gateway:
-    image: onwardapp/gateway:${GATEWAY_VSN}
+    image: demo/gateway:${GATEWAY_VSN}
     network_mode: "host"
     environment:
       - EZ_INPUT_HOST
@@ -82,7 +82,7 @@ services:
 
   # workers
   db_w:
-    image: onwardapp/db_w:${DB_W_VSN}
+    image: demo/db_w:${DB_W_VSN}
     network_mode: "host"
     environment:
       - LISTEN_HOST=${EZ_PIPE_HOST}
@@ -97,7 +97,7 @@ services:
     restart: "unless-stopped"
 
   http_map_w:
-    image: onwardapp/http_map_w:${HTTP_MAP_W_VSN}
+    image: demo/http_map_w:${HTTP_MAP_W_VSN}
     network_mode: "host"
     environment:
       - LISTEN_HOST=${EZ_PIPE_HOST}

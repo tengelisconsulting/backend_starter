@@ -6,6 +6,7 @@
 # it will be run before this version of the DB is installed.
 # Similarly with the file 'post.sql' in this directory
 
+ORGANIZATION="demo"
 
 bin_dir=$(dirname "$(readlink -f "$0")")
 DB_DIR=${bin_dir}/..
@@ -30,7 +31,7 @@ do_install() {
            -e FORCE=1 \
            -e PGHOST=${PGHOST} \
            -e PGUSER=${PGUSER} \
-           onwardapp/db:${SHORT_GIT_REV}
+           ${ORGANIZATION}/db:${SHORT_GIT_REV}
 }
 
 run_upgrade() {

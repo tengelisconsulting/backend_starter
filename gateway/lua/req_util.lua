@@ -1,9 +1,15 @@
+local log = require("lua/log")
 local cjson = require "cjson"
+
 
 local M = {}
 function M.get_body_table()
    ngx.req.read_body()
-   return cjson.decode(ngx.req.get_body_data())
+   local data = ngx.req.get_body_data()
+   if data then
+      return cjson.decode(data)
+   end
+   return {}
 end
 
 function M.get_body_string()
