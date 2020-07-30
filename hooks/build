@@ -1,0 +1,42 @@
+#!/bin/bash
+
+FILE=${BASH_SOURCE[0]:-${(%):-%x}}
+HOOK_DIR="$( cd "$( dirname "${FILE}" )" >/dev/null 2>&1 && pwd )"
+source ${HOOK_DIR}/hooks.env
+
+
+set -e
+
+base() {
+    if [[ "${IS_DOCKER_HUB}" -eq "1" ]]; then
+        build_base_images
+        push_base_images
+    else
+        if [[ "${BUILD_BASE}" == "1" ]]; then
+            build_base_images
+        fi
+    fi
+}
+
+services() {
+    for i in ${CORE}; do
+        if [[ "${IS_DOCKER_HUB}" -eq "1" ]]; then
+            docker_hub_build "${i}" "${i}"
+        else
+            local_build "${i}" "${i}"
+        fi
+    done
+    for i in ${WORKERS}; do
+        if [[ "${IS_DOCKER_HUB}" -eq "1" ]]; then
+            docker_hub_build "${i}_w" "workers/${i}"
+        else
+            local_build "${i}_w" "workers/${i}"
+        fi
+    done
+    echo "SERVICES BUILT SUCCESSFULLY"
+}
+
+base
+services
+
+echo "BUILD SUCCESS"

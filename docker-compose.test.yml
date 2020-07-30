@@ -1,0 +1,43 @@
+  sut:
+    build: .
+    network_mode: "host"
+    depends_on:
+      - test_db
+      - in_pipe
+      - worker_pipe
+      - broker_pipe
+      - broker
+      - gateway
+      - postgrest
+      - auth_provider_w
+      - authenticate_w
+      - authorize_w
+      - db_w
+      - crypto_w
+      - http_map_w
+      - mail_template_w
+      - mail_io_w
+      - user_mail_w
+      - user_notification_w
+    environment:
+      - EZ_INPUT_PORT
+      - EZ_WORKER_PORT_A
+      - PGHOST
+      - PGUSER
+      - PGPASSWORD
+      - PGDB
+      - GATEWAY_PORT
+      - SERVICE_WAIT_S
+      - TEST_MAIL_CREDS_F=/resources/test-gmail-creds.json
+    volumes:
+      - ${TEST_MAIL_CREDS_F}:/resources/test-gmail-creds.json:ro
+
+
+  test_db:
+    image: postgres:12.2
+    network_mode: "host"
+    environment:
+      - POSTGRES_USER=${PGUSER}
+      - POSTGRES_PASSWORD=${PGPASSWORD}
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"

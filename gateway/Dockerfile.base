@@ -1,0 +1,37 @@
+FROM openresty/openresty:buster-fat
+
+ENV TINI_VERSION v0.19.0
+WORKDIR /app
+
+RUN apt update \
+        && apt install --assume-yes \
+        build-essential \
+        unzip \
+        wget \
+        libzmq3-dev \
+        # luarocks
+        && wget http://luarocks.org/releases/luarocks-2.0.13.tar.gz \
+        && tar -xzvf luarocks-2.0.13.tar.gz \
+        && cd luarocks-2.0.13/ \
+        && ./configure --prefix=/usr/local/openresty/luajit \
+        --with-lua=/usr/local/openresty/luajit/ \
+        --lua-suffix=jit \
+        --with-lua-include=/usr/local/openresty/luajit/include/luajit-2.1 \
+        && make \
+        && make install \
+        && /usr/local/openresty/luajit/bin/luarocks install lzmq \
+        && /usr/local/openresty/luajit/bin/luarocks install lua-llthreads2 \
+        # opm
+        && opm get ledgetech/lua-resty-http \
+        p0pr0ck5/lua-resty-cookie \
+        openresty/lua-resty-redis \
+        fffonion/lua-resty-openssl \
+        && curl -L https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini -o /tini \
+        && chmod +x /tini \
+        && apt remove --assume-yes \
+        build-essential \
+        wget \
+        unzip \
+        && apt autoremove --assume-yes \
+        && apt clean \
+        && rm -rf /var/lib/apt/lists/*

@@ -1,0 +1,219 @@
+#!/bin/bash
+
+export PGUSER="postgres"
+export PGPASSWORD="postgres"
+export PGST_PASS="${PGPASSWORD}"
+export GOOGLE_CLIENT_ID="googclientid"
+export GOOGLE_CLIENT_SECRET="googclientsecret"
+
+
+source ./env/dev.env
+source ./hooks/hooks.env
+
+TMP_DCP_FILE="./docker-compose.test.yml.tmp"
+DB_DCP_FILE="./docker-compose.db-test.yaml"
+
+
+TAIL_LINES=50
+
+if [[ "${RUN}" == "" ]]; then
+    RUN="DB,IT,W"
+fi
+RUN=",${RUN},"
+
+DEBUG_SERVICES="\
+        gateway \
+         postgrest \
+          auth_provider_w \
+          authenticate_w \
+          authorize_w \
+          user_notification_w \
+          user_mail_w \
+          mail_io_w \
+          db_w"
+
+
+if [[ "${DB_WAIT_S}" == "" ]]; then
+    DB_WAIT_S=2
+fi
+if [[ "${SERVICE_WAIT_S}" == "" ]]; then
+    SERVICE_WAIT_S=2
+fi
+
+print_banner() {
+    text=$1
+    msg=$(cat <<-END
+------------------------------------ ${text} --------------------------------
+END
+       )
+    echo ""
+    echo ${msg}
+}
+
+decrypt_file() {
+    IN_FILE="${1}.enc"
+    echo "decrypting ${IN_FILE}"
+    OUT_FILE="$1"
+    docker run --rm --net=host \
+           -v "${IN_FILE}:/in/file" \
+           tengelisconsulting/crypto \
+           symmetric decrypt_file \
+           --key="${ONWARD_TEST_KEY}" \
+           --file_name=/in/file > "${OUT_FILE}"
+    if [[ "$?" != "0" ]]; then
+        echo "failed to decrypt ${IN_FILE}"
+        exit 1
+    fi
+}
+
+unlock_creds() {
+    decrypt_file `pwd`/env/test_secrets.env \
+        && source ./env/test_secrets.env \
+        && rm ./env/test_secrets.env \
+        && decrypt_file ${TEST_MAIL_CREDS_F} \
+        && decrypt_file ${GMAIL_CREDS_F}
+}
+
+lock_creds() {
+    rm ${TEST_MAIL_CREDS_F}
+    rm ${GMAIL_CREDS_F}
+}
+
+dump_dcp_logs() {
+    for s in ${DEBUG_SERVICES}; do
+        docker-compose -f ${TMP_DCP_FILE} logs --tail=${TAIL_LINES} ${s}
+    done
+}
+
+db_test() {
+    print_banner "DB TESTS"
+    docker-compose -f ${DB_DCP_FILE} build \
+        && echo "y" | docker-compose -f ${DB_DCP_FILE} run test \
+        && docker-compose -f ${DB_DCP_FILE} down
+    if [[ ! "${?}" == "0" ]]; then
+        exit 1
+    fi
+    print_banner "DB TEST SUCCESS"
+}
+
+install_db() {
+    local_build db db
+    docker run \
+           --rm \
+           --net=host \
+           -e FORCE=1 \
+           -e PGHOST=localhost \
+           -e PGUSER=postgres \
+           ${ORGANIZATION}/db:latest
+}
+
+build_test_image() {
+    docker build -t ${TEST_IMAGE_NAME} .
+    if [[ "$?" != "0" ]]; then
+        exit 1
+    fi
+}
+
+integration_test() {
+    print_banner "INTEGRATION TESTS"
+    cp ./docker-compose.yaml ${TMP_DCP_FILE}
+    echo "" >> ${TMP_DCP_FILE}
+    cat ./docker-compose.test.yml >> ${TMP_DCP_FILE}
+
+    cleanup() {
+        docker-compose -f ${TMP_DCP_FILE} down
+        rm ${TMP_DCP_FILE}
+    }
+
+    it_failure() {
+        echo "INTEGRATION TESTS FAILED"
+        dump_dcp_logs
+        cleanup
+        exit 1
+    }
+
+    docker-compose -f ${TMP_DCP_FILE} build \
+        && docker-compose -f ${TMP_DCP_FILE} up -d test_db
+
+    echo "waiting for DB init ..."
+    sleep ${DB_WAIT_S}
+    install_db > /dev/null
+    if [[ "${?}" != "0" ]]; then
+        echo "DB INSTALL FAILED"
+        it_failure
+    fi
+    LOG_LEVEL=DEBUG \
+             docker-compose -f ${TMP_DCP_FILE} run sut
+    if [[ ! "${?}" -eq "0" ]]; then
+        it_failure
+    fi
+    cleanup
+    print_banner "INTEGRATION TESTS SUCCESS"
+}
+
+run_worker_test() {
+    WORKER=$1
+    echo "testing worker ${WORKER}_w"
+    docker-compose up -d ${WORKER}_w
+    docker run \
+           --rm \
+           --net=host \
+           -e EZ_INPUT_PORT=${EZ_INPUT_PORT} \
+           -e GATEWAY_PORT=${GATEWAY_PORT} \
+           -e EZ_WORKER_PORT_A=${EZ_WORKER_PORT_A} \
+           -e MON_RELOAD_INTERVAL_S=${MON_RELOAD_INTERVAL_S} \
+           -e TEST_CREDS_KEY=${TEST_CREDS_KEY} \
+           ${TEST_IMAGE_NAME} \
+           w ${WORKER}
+    res=$?
+    if [[ ! "${res}" -eq "0" ]]; then
+        docker-compose logs ${WORKER}_w
+    fi
+    docker-compose down
+    if [[ ! "${res}" == "0" ]]; then
+        exit 1
+    fi
+}
+
+worker_tests() {
+    print_banner "WORKER TESTS"
+    for w in ${WORKERS}; do
+        run_worker_test ${w}
+    done
+    print_banner "WORKER TESTS SUCCESS"
+}
+
+test_skip_flag() {
+    pattern=$1
+    match=$(echo "${RUN}" | grep ",${pattern},")
+    if [[ "${match}" != "" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+SUCCESS_MSG=$(cat <<-END
+
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+X+---------------------------------------------------------------------------+X
+X|_____________________________ TESTS PASSED ________________________________|X
+X+---------------------------------------------------------------------------+X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+END
+)
+
+build_test_image
+
+unlock_creds
+if test_skip_flag "DB"; then
+    db_test
+fi
+if test_skip_flag "W"; then
+    worker_tests
+fi
+if test_skip_flag "IT"; then
+    integration_test
+fi
+lock_creds
+
+echo "${SUCCESS_MSG}"

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+GIT_REV=$(git rev-parse --short --verify HEAD)
+
+CI_HOST="https://onward-dev.xyz"
+CI_PORT="8443"
+URL="/onward/build-success/backend/${GIT_REV}"
+BUILD_SUCCESS_TARGET_URL="${CI_HOST}:${CI_PORT}${URL}"
+
+docker run --rm \
+       -e TARGET_URL=${BUILD_SUCCESS_TARGET_URL} \
+       -e HOOK_KEY=${HOOK_KEY} \
+       tengelisconsulting/docker-hub-hooks \
+       || true

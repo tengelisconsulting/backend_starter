@@ -1,0 +1,24 @@
+version: "3.6"
+services:
+
+  test:
+    build: .
+    network_mode: "host"
+    depends_on:
+      - test_db
+    environment:
+      - PGDB
+      - PGHOST
+      - PGUSER
+      - PGPASSWORD
+    entrypoint:
+      - /app/db/tests/main.py
+
+  test_db:
+    image: postgres:12.2
+    network_mode: "host"
+    environment:
+      - POSTGRES_USER=${PGUSER}
+      - POSTGRES_PASSWORD=${PGPASSWORD}
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"

@@ -1,0 +1,110 @@
+version: "3.6"
+services:
+  # pipes
+  in_pipe:
+    image: tengelisconsulting/pipes_py
+    network_mode: "host"
+    restart: "unless-stopped"
+    environment:
+      - LOG_LEVEL
+      - IN_PORT=${EZ_INPUT_PORT_A}
+      - DEALER_PORT=${EZ_INPUT_PORT_B}
+  worker_pipe:
+    image: tengelisconsulting/pipes_py
+    network_mode: "host"
+    restart: "unless-stopped"
+    environment:
+      - LOG_LEVEL
+      - IN_PORT=${EZ_WORKER_PORT_A}
+      - DEALER_PORT=${EZ_WORKER_PORT_B}
+  broker_pipe:
+    image: tengelisconsulting/pipes_py
+    network_mode: "host"
+    restart: "unless-stopped"
+    environment:
+      - LOG_LEVEL
+      - IN_PORT=${EZ_BROKER_PORT_A}
+      - BROADCAST_PORT=${EZ_BROKER_BROADCAST_PORT}
+
+  broker:
+    image: tengelisconsulting/broker_py
+    network_mode: "host"
+    restart: "unless-stopped"
+    environment:
+      - BROKER_BROADCAST_PORT=${EZ_BROKER_BROADCAST_PORT}
+      - BROKER_PIPE_HOST=${EZ_PIPE_HOST}
+      - BROKER_PIPE_IN_PORT=${EZ_BROKER_PORT_A}
+      - IN_PIPE_HOST=${EZ_PIPE_HOST}
+      - IN_PIPE_PORT=${EZ_INPUT_PORT_B}
+      - LOG_LEVEL
+      - POLL_INTERVAL_MS
+      - WORKER_LIFETIME_S
+      - WORKER_LIVENESS
+      - WORKER_PIPE_HOST=${EZ_PIPE_HOST}
+      - WORKER_PIPE_PORT=${EZ_WORKER_PORT_B}
+
+  # core stuff
+  gateway:
+    image: onwardapp/gateway:${GATEWAY_VSN}
+    network_mode: "host"
+    environment:
+      - EZ_INPUT_HOST
+      - EZ_INPUT_PORT
+
+      - GATEWAY_HOST
+      - GATEWAY_PORT
+      - LUA_CODE_CACHE
+      - PGST_HOST
+      - PGST_PORT
+      - WORKER_PROCS
+      - NEW_USER_RATE
+      - LOGIN_RATE
+      - GATEWAY_LOG_LEVEL
+    restart: "unless-stopped"
+
+  postgrest:
+    image: tengelisconsulting/postgrest:latest
+    network_mode: "host"
+    environment:
+      # postgrest
+      - PGST_USER=${PGST_USER}
+      - PGST_PASS=${PGST_PASS}
+      - PGST_PORT=${PGST_PORT}
+      - PGST_SCHEMA=${PGST_SCHEMA}
+      - PGST_ANON_ROLE=${PGST_ANON_ROLE}
+      - PGST_POOL=${PGST_POOL}
+      - PGST_POOL_TIMEOUT=${PGST_POOL_TIMEOUT}
+      # postgres
+      - PGHOST
+      - PGPORT
+      - PGDB
+    restart: unless-stopped
+
+  # workers
+  db_w:
+    image: onwardapp/db_w:${DB_W_VSN}
+    network_mode: "host"
+    environment:
+      - LISTEN_HOST=${EZ_PIPE_HOST}
+      - LOG_LEVEL
+      - PORT=${EZ_WORKER_PORT_A}
+      - SERVICE_NAME=DB
+      # specific
+      - PGDB
+      - PGHOST
+      - PGUSER
+      - PGPASSWORD
+    restart: "unless-stopped"
+
+  http_map_w:
+    image: onwardapp/http_map_w:${HTTP_MAP_W_VSN}
+    network_mode: "host"
+    environment:
+      - LISTEN_HOST=${EZ_PIPE_HOST}
+      - LOG_LEVEL
+      - PORT=${EZ_WORKER_PORT_A}
+      - SERVICE_NAME=HTTP_MAP
+      - EZ_INPUT_HOST
+      - EZ_INPUT_PORT
+      # specific
+    restart: "unless-stopped"

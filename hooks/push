@@ -1,0 +1,15 @@
+#!/bin/bash
+
+
+FILE=${BASH_SOURCE[0]:-${(%):-%x}}
+HOOK_DIR="$( cd "$( dirname "${FILE}" )" >/dev/null 2>&1 && pwd )"
+source ${HOOK_DIR}/hooks.env
+
+set -e
+docker login --username ${HUB_USERNAME} --password ${HUB_PASSWORD}
+for s in ${CORE}; do
+    docker_hub_push "$s"
+done
+for s in ${WORKERS}; do
+    docker_hub_push "${s}_w"
+done
